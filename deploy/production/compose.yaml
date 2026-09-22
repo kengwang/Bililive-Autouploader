@@ -1,0 +1,43 @@
+services:
+  uploader:
+    image: ghcr.1ms.run/kengwang/bililive-autouploader:latest
+    pull_policy: always
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /root/BililiveRecorder/uploader/data
+        target: /app/data
+      - type: bind
+        source: /root/BililiveRecorder/uploader/data-protection
+        target: /root/.aspnet/DataProtection-Keys
+      - type: bind
+        source: /mnt/storage/bililive
+        target: /recordings
+    environment:
+      TZ: Asia/Shanghai
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Data Source=/app/data/app.db
+      Storage__LocalRoot: /recordings
+      Storage__CloudRoot: /录播
+      Storage__MaxParallelJobs: "2"
+      Storage__PartParallelism: "4"
+      Storage__SidecarExtensionsCsv: .xml,.ass,.danmaku
+      Webhook__Secret: ""
+      Baidu__Cookie: ""
+      Baidu__AccessToken: ""
+    networks:
+      1panel-network:
+        aliases:
+          - uploader
+          - bililive-uploader
+      bililiverec:
+        aliases:
+          - uploader
+
+networks:
+  1panel-network:
+    external: true
+  bililiverec:
+    external: true
+    name: bililiverecorder_bililiverec

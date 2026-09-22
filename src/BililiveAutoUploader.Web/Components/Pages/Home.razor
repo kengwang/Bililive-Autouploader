@@ -1,5 +1,7 @@
 @page "/"
-@inject HttpClient Http
+@attribute [Authorize]
+@inject IUploadJobStore JobStore
+@inject IFileComparisonService ComparisonService
 @rendermode InteractiveServer
 
 <PageTitle>录播上传面板</PageTitle>
@@ -27,6 +29,30 @@
     private ComparisonRun? _comparison;
     private string? _error;
     protected override async Task OnInitializedAsync() => await RefreshAsync();
-    private async Task RefreshAsync() { try { _jobs = await Http.GetFromJsonAsync<List<JobSummary>>("/api/jobs"); _error = null; } catch (Exception ex) { _error = ex.Message; } }
-    private async Task CompareAsync() { try { var response = await Http.PostAsync("/api/comparisons", null); _comparison = await response.Content.ReadFromJsonAsync<ComparisonRun>(); _error = null; } catch (Exception ex) { _error = ex.Message; } }
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            var jobs = await JobStore.GetPageAsync(0, 50, CancellationToken.None);
+            _jobs = jobs.Select(job => new JobSummary(job.Id, job.LocalGroupKey, job.Status, job.AttemptCount, job.TotalBytes, job.UploadedBytes, job.UploadSpeedBytesPerSecond, job.LastError, job.CreatedAt, job.CompletedAt)).ToList();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task CompareAsync()
+    {
+        try
+        {
+            _comparison = await ComparisonService.CompareAsync(CancellationToken.None);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
 }

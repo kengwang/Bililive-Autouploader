@@ -4,5 +4,8 @@
 .idea/
 data/
 recordings/
+*.db
+*.db-shm
+*.db-wal
 *.user
 *.suo

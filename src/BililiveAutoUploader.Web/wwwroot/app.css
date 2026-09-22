@@ -3,9 +3,25 @@ body { margin: 0; font-family: system-ui, sans-serif; color: #1e293b; background
 .shell { min-height: 100vh; }
 header { display: flex; justify-content: space-between; padding: 1rem 2rem; background: #0f172a; color: white; }
 header a { color: white; text-decoration: none; font-weight: 700; }
+header nav { display: flex; align-items: center; gap: 1rem; }
+header nav a { font-size: .9rem; font-weight: 500; color: #cbd5e1; }
 main { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
 .toolbar { display: flex; gap: .75rem; margin-bottom: 1rem; }
 button { border: 0; border-radius: .5rem; padding: .6rem 1rem; background: #2563eb; color: white; cursor: pointer; }
 .card { background: white; border-radius: .75rem; padding: 1rem; margin: 1rem 0; box-shadow: 0 1px 3px #0001; overflow: auto; }
 table { width: 100%; border-collapse: collapse; } th, td { text-align: left; border-bottom: 1px solid #e2e8f0; padding: .6rem; white-space: nowrap; }
 .status { font-weight: 700; } .error { color: #b91c1c; } code { background: #e2e8f0; padding: .15rem .3rem; border-radius: .25rem; }
+.account-page { min-height: 100vh; display: grid; place-items: center; padding: 1rem; background: #e2e8f0; }
+.account-card { width: min(100%, 26rem); padding: 2rem; border-radius: 1rem; background: white; box-shadow: 0 20px 50px #0f172a24; }
+.account-card h1 { margin: .5rem 0; }
+.account-brand { color: #2563eb; font-weight: 800; letter-spacing: .02em; }
+.muted { color: #64748b; margin: 0 0 1.5rem; }
+.account-card form { display: grid; gap: .6rem; }
+.account-card label { font-weight: 650; }
+.account-card input[type="password"] { width: 100%; border: 1px solid #cbd5e1; border-radius: .5rem; padding: .7rem .8rem; font: inherit; }
+.check-row { display: flex; align-items: center; gap: .5rem; margin: .35rem 0 .65rem; font-weight: 400 !important; }
+.full-width { width: 100%; margin-top: .5rem; }
+.validation { color: #b91c1c; font-size: .9rem; }
+.validation:empty { display: none; }
+.success { color: #166534; background: #dcfce7; border-radius: .5rem; padding: .65rem .8rem; }
+.account-link { display: block; margin-top: 1rem; text-align: center; color: #2563eb; text-decoration: none; }

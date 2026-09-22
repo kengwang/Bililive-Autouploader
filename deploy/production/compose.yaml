@@ -18,12 +18,12 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Data Source=/app/data/app.db
+      Panel__InitialPassword: "${PANEL_INITIAL_PASSWORD:-}"
       Storage__LocalRoot: /recordings
       Storage__CloudRoot: /录播
       Storage__MaxParallelJobs: "2"
       Storage__PartParallelism: "4"
       Storage__SidecarExtensionsCsv: .xml,.ass,.danmaku
-      Webhook__Secret: ""
       Baidu__Cookie: ""
       Baidu__AccessToken: ""
     networks:

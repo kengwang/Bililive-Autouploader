@@ -1,0 +1,25 @@
+@page "/account/logout"
+@model BililiveAutoUploader.Web.Pages.Account.LogoutModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>退出 · Bililive AutoUploader</title>
+    <link rel="stylesheet" href="~/app.css" />
+</head>
+<body class="account-page">
+    <main class="account-card">
+        <div class="account-brand">Bililive AutoUploader</div>
+        <h1>退出登录</h1>
+        <p class="muted">确认结束当前面板会话？</p>
+        <form method="post">
+            <button type="submit" class="full-width">确认退出</button>
+        </form>
+        <a class="account-link" href="/">返回面板</a>
+    </main>
+</body>
+</html>

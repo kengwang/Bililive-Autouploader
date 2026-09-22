@@ -14,7 +14,7 @@ public sealed class WebhookRequest
 
 public sealed record WebhookResponse(bool Accepted, bool Duplicate, Guid? JobId);
 
-public sealed class WebhookEndpoint(IWebhookProcessor processor, IConfiguration configuration) : Endpoint<WebhookRequest, WebhookResponse>
+public sealed class WebhookEndpoint(IWebhookProcessor processor) : Endpoint<WebhookRequest, WebhookResponse>
 {
     public override void Configure()
     {
@@ -25,13 +25,6 @@ public sealed class WebhookEndpoint(IWebhookProcessor processor, IConfiguration 
 
     public override async Task HandleAsync(WebhookRequest req, CancellationToken ct)
     {
-        var expected = configuration["Webhook:Secret"];
-        var supplied = HttpContext.Request.Headers["X-Webhook-Secret"].ToString();
-        if (!string.IsNullOrWhiteSpace(expected) && !CryptographicEquals(expected, supplied))
-        {
-            await HttpContext.Response.SendUnauthorizedAsync(ct);
-            return;
-        }
         if (string.IsNullOrWhiteSpace(req.EventId) || string.IsNullOrWhiteSpace(req.EventType))
         {
             AddError("EventId 和 EventType 不能为空。");
@@ -41,7 +34,4 @@ public sealed class WebhookEndpoint(IWebhookProcessor processor, IConfiguration 
         var result = await processor.ProcessAsync(new WebhookEnvelope(req.EventType, req.EventTimestamp, req.EventId, req.EventData), ct);
         await HttpContext.Response.SendAsync(new WebhookResponse(result.Accepted, result.Duplicate, result.JobId), 202, cancellation: ct);
     }
-
-    private static bool CryptographicEquals(string left, string right)
-        => System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(left), System.Text.Encoding.UTF8.GetBytes(right));
 }

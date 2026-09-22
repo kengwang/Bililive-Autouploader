@@ -1,0 +1,33 @@
+@page "/account/login"
+@model BililiveAutoUploader.Web.Pages.Account.LoginModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>登录 · Bililive AutoUploader</title>
+    <link rel="stylesheet" href="~/app.css" />
+</head>
+<body class="account-page">
+    <main class="account-card">
+        <div class="account-brand">Bililive AutoUploader</div>
+        <h1>登录面板</h1>
+        <p class="muted">输入面板管理员密码继续。</p>
+        <form method="post">
+            <input type="hidden" asp-for="ReturnUrl" />
+            <div asp-validation-summary="ModelOnly" class="validation"></div>
+            <label asp-for="Password">密码</label>
+            <input asp-for="Password" autocomplete="current-password" autofocus />
+            <span asp-validation-for="Password" class="validation"></span>
+            <label class="check-row">
+                <input asp-for="RememberMe" />
+                <span>在这台设备上保持登录</span>
+            </label>
+            <button type="submit" class="full-width">登录</button>
+        </form>
+    </main>
+</body>
+</html>

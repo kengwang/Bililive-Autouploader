@@ -9,6 +9,6 @@ services:
     environment:
       Storage__LocalRoot: /recordings
       ConnectionStrings__Default: Data Source=/app/data/app.db
-      Webhook__Secret: change-me
+      Panel__InitialPassword: "${PANEL_INITIAL_PASSWORD:-}"
       Baidu__Cookie: ""
       Baidu__AccessToken: ""

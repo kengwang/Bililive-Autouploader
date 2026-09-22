@@ -1,0 +1,32 @@
+@page "/"
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+<PageTitle>录播上传面板</PageTitle>
+<h1>录播上传面板</h1>
+<div class="toolbar"><button @onclick="RefreshAsync">刷新任务</button><button @onclick="CompareAsync">开始本地/云端比对</button></div>
+@if (_error is not null) { <p class="error">@_error</p> }
+<section class="card">
+    <h2>上传任务</h2>
+    @if (_jobs is null) { <p>加载中…</p> }
+    else if (_jobs.Count == 0) { <p>暂无任务。将录播姬 Webhook 指向 <code>/api/webhooks/bililive</code>。</p> }
+    else {
+        <table><thead><tr><th>状态</th><th>路径组</th><th>进度</th><th>错误</th><th>创建时间</th></tr></thead><tbody>
+        @foreach (var job in _jobs) { <tr><td><span class="status">@job.Status</span></td><td>@job.LocalGroupKey</td><td>@job.UploadedBytes / @job.TotalBytes (@(job.TotalBytes == 0 ? 0 : job.UploadedBytes * 100 / job.TotalBytes)%)</td><td>@job.LastError</td><td>@job.CreatedAt.ToLocalTime()</td></tr> }
+        </tbody></table>
+    }
+</section>
+@if (_comparison is not null) {
+<section class="card"><h2>最近一次比对</h2><p>共 @_comparison.Items.Count 项，完成于 @_comparison.CompletedAt</p><table><thead><tr><th>路径</th><th>结果</th><th>本地大小</th><th>云端大小</th></tr></thead><tbody>
+@foreach (var item in _comparison.Items.Take(100)) { <tr><td>@item.RelativePath</td><td>@item.Kind</td><td>@item.LocalLength</td><td>@item.CloudLength</td></tr> }
+</tbody></table></section>
+}
+
+@code {
+    private List<JobSummary>? _jobs;
+    private ComparisonRun? _comparison;
+    private string? _error;
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+    private async Task RefreshAsync() { try { _jobs = await Http.GetFromJsonAsync<List<JobSummary>>("/api/jobs"); _error = null; } catch (Exception ex) { _error = ex.Message; } }
+    private async Task CompareAsync() { try { var response = await Http.PostAsync("/api/comparisons", null); _comparison = await response.Content.ReadFromJsonAsync<ComparisonRun>(); _error = null; } catch (Exception ex) { _error = ex.Message; } }
+}

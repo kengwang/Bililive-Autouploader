@@ -1,0 +1,14 @@
+services:
+  bililive-autouploader:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./recordings:/recordings
+    environment:
+      Storage__LocalRoot: /recordings
+      ConnectionStrings__Default: Data Source=/app/data/app.db
+      Webhook__Secret: change-me
+      Baidu__Cookie: ""
+      Baidu__AccessToken: ""

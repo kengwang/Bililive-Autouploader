@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BililiveAutoUploader.Application/BililiveAutoUploader.Application.csproj" />
+    <Project Path="src/BililiveAutoUploader.Domain/BililiveAutoUploader.Domain.csproj" />
+    <Project Path="src/BililiveAutoUploader.Infrastructure/BililiveAutoUploader.Infrastructure.csproj" />
+    <Project Path="src/BililiveAutoUploader.Web/BililiveAutoUploader.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BililiveAutoUploader.Tests.Integration/BililiveAutoUploader.Tests.Integration.csproj" />
+    <Project Path="tests/BililiveAutoUploader.Tests.Unit/BililiveAutoUploader.Tests.Unit.csproj" />
+  </Folder>
+</Solution>

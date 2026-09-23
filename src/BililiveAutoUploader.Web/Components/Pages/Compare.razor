@@ -15,6 +15,20 @@
 </div>
 @if (_error is not null) { <p class="error">@_error</p> }
 @if (_message is not null) { <p class="success">@_message</p> }
+@if (_scanProgress is not null && (_scanProgress.IsRunning || _scanProgress.CompletedAt is not null))
+{
+    <section class="card scan-progress" aria-live="polite">
+        <div class="pane-heading"><h2>全量扫描</h2><span class="status">@ScanPhaseText(_scanProgress)</span></div>
+        @if (_scanProgress.IsRunning)
+        {
+            <div class="progress-track"><div class="progress-indeterminate"></div></div>
+            <div class="scan-metrics"><span>本地已扫描 <strong>@_scanProgress.LocalFilesScanned</strong> 个文件</span><span>云端已扫描 <strong>@_scanProgress.CloudFilesScanned</strong> 个文件</span><span>已生成结果 <strong>@_scanProgress.ResultCount</strong> 项</span></div>
+            @if (!string.IsNullOrWhiteSpace(_scanProgress.CurrentPath)) { <p class="muted scan-current">当前：@_scanProgress.CurrentPath</p> }
+        }
+        else if (_scanProgress.Error is not null) { <p class="error">扫描失败：@_scanProgress.Error</p> }
+        else { <p class="muted">扫描完成，共 @_scanProgress.ResultCount 个文件，完成于 @_scanProgress.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")。</p> }
+    </section>
+}
 <section class="card directory-bar"><button class="secondary-button" @onclick="GoUpAsync" disabled="@(_relativeDirectory.Length == 0 || _busy)">上一级</button><span class="directory-root">本地 /recordings/@_relativeDirectory</span><span class="directory-arrow">↔</span><span class="directory-root">百度 @Storage.CloudRoot/@_relativeDirectory</span></section>
 <section class="dual-pane">
     <div class="card browser-pane"><div class="pane-heading"><h2>本地录播目录</h2><span>@_localEntries.Count 项</span></div><div class="table-scroll"><table><thead><tr><th></th><th>名称</th><th>大小</th><th>同步状态</th><th>修改时间</th><th></th></tr></thead><tbody>
@@ -43,6 +57,7 @@
     private DeleteTarget? _pendingDelete;
     private bool _pendingDeleteSelected;
     private ComparisonRun? _comparisonRun;
+    private ComparisonProgress? _scanProgress;
     private IReadOnlyList<ComparisonItem> _mismatches => _comparisonRun?.Items.Where(x => x.Kind is ComparisonKind.LocalOnly or ComparisonKind.CloudOnly or ComparisonKind.DifferentSize or ComparisonKind.HashDifferent).ToList() ?? [];
     protected override async Task OnInitializedAsync() => await RefreshDirectoryAsync();
     private async Task RefreshDirectoryAsync(bool clearFeedback = true)
@@ -54,9 +69,22 @@
     }
     private async Task CompareAllAsync()
     {
-        _busy = true; _error = null; _message = null;
-        try { _comparisonRun = await ComparisonService.CompareAsync(CancellationToken.None); _message = $"全量扫描完成，共 {_comparisonRun.Items.Count} 个文件。"; await RefreshDirectoryAsync(); }
-        catch (Exception ex) { _error = ex.Message; _busy = false; }
+        _busy = true; _error = null; _message = null; _scanProgress = ComparisonService.GetProgress();
+        try
+        {
+            var scan = ComparisonService.CompareAsync(CancellationToken.None);
+            while (!scan.IsCompleted)
+            {
+                _scanProgress = ComparisonService.GetProgress();
+                await Task.WhenAny(scan, Task.Delay(500));
+                await InvokeAsync(StateHasChanged);
+            }
+            _comparisonRun = await scan;
+            _scanProgress = ComparisonService.GetProgress();
+            _message = $"全量扫描完成，共 {_comparisonRun.Items.Count} 个文件。";
+            await RefreshDirectoryAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; _scanProgress = ComparisonService.GetProgress(); _busy = false; }
     }
     private async Task OpenAsync(FileEntryDto entry) { if (entry.IsDirectory) { _relativeDirectory = entry.Path; await RefreshDirectoryAsync(); } }
     private async Task OpenCloudAsync(CloudFileEntry entry) { if (entry.IsDirectory) { _relativeDirectory = RelativeFromCloudPath(entry.Path); await RefreshDirectoryAsync(); } }
@@ -112,6 +140,7 @@
     private string LocalStatusText(FileEntryDto entry) { var cloud = _cloudEntries.FirstOrDefault(x => string.Equals(x.Name, entry.Name, StringComparison.OrdinalIgnoreCase)); return cloud is null ? "仅本地" : entry.IsDirectory != cloud.IsDirectory ? "类型不同" : entry.IsDirectory || entry.Length == cloud.Length ? "已同步" : "大小不同"; }
     private string LocalStatusClass(FileEntryDto entry) => LocalStatusText(entry).Replace("仅本地", "kind-LocalOnly").Replace("已同步", "kind-SameSize").Replace("大小不同", "kind-DifferentSize").Replace("类型不同", "kind-DifferentSize");
     private static string KindText(ComparisonKind kind) => kind switch { ComparisonKind.LocalOnly => "仅本地", ComparisonKind.CloudOnly => "仅云端", ComparisonKind.SameSize => "大小一致", ComparisonKind.DifferentSize => "大小不同", ComparisonKind.HashEqual => "哈希一致", ComparisonKind.HashDifferent => "哈希不同", _ => "无法读取" };
+    private static string ScanPhaseText(ComparisonProgress progress) => progress.IsRunning ? progress.Phase == "Cloud" ? "正在扫描云端" : "正在扫描本地" : progress.Error is null ? "已完成" : "失败";
     private static string FormatBytes(long? value) => value is null ? "—" : value < 1024 * 1024 ? $"{value:N0} B" : $"{value.Value / 1024d / 1024d:N2} MiB";
     private sealed record DeleteTarget(string Name, string RelativePath, bool IsDirectory, bool Cloud);
 }

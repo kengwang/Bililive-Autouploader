@@ -116,7 +116,19 @@ public interface IFileChecksumService
 public interface IFileComparisonService
 {
     Task<ComparisonRun> CompareAsync(CancellationToken cancellationToken);
+    ComparisonProgress GetProgress();
 }
+
+public sealed record ComparisonProgress(
+    bool IsRunning,
+    string Phase,
+    string CurrentPath,
+    int LocalFilesScanned,
+    int CloudFilesScanned,
+    int ResultCount,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    string? Error);
 
 public sealed class StorageOptions
 {

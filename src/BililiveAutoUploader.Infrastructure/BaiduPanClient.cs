@@ -71,7 +71,8 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
         var precreateForm = new Dictionary<string, string>
         {
             ["path"] = cloudPath, ["target_path"] = directory + "/", ["size"] = checksum.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["isdir"] = "0", ["rtype"] = "3", ["autoinit"] = "1", ["block_list"] = JsonSerializer.Serialize(checksum.BlockMd5),
+            ["isdir"] = "0", ["rtype"] = "2", ["autoinit"] = "1", ["block_list"] = JsonSerializer.Serialize(checksum.BlockMd5),
+            ["content-md5"] = checksum.Md5, ["slice-md5"] = checksum.SliceMd5, ["contentCrc32"] = checksum.Crc32,
             ["local_mtime"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
         using var precreateResponse = await SendAsync(HttpMethod.Post, $"{options.BaseAddress.TrimEnd('/')}/api/precreate", new FormUrlEncodedContent(precreateForm), cancellationToken).ConfigureAwait(false);

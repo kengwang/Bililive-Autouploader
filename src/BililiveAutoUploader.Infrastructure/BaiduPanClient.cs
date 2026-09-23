@@ -93,7 +93,7 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
             using var content = new MultipartFormDataContent();
             content.Add(new ByteArrayContent(buffer, 0, read), "uploadedfile", Path.GetFileName(localPath));
             var partOffset = uploaded;
-            var uploadUri = $"{options.PcsAddress.TrimEnd('/')}/rest/2.0/pcs/file?method=upload&type=tmpfile&path={Uri.EscapeDataString(cloudPath)}&uploadid={Uri.EscapeDataString(uploadId)}&partseq={part}&partoffset={partOffset}&app_id={options.AppId}";
+            var uploadUri = $"{options.PcsAddress.TrimEnd('/')}/rest/2.0/pcs/file?method=upload&type=tmpfile&path={Uri.EscapeDataString(cloudPath)}&uploadid={Uri.EscapeDataString(uploadId)}&partseq={part}&partoffset={partOffset}&vip=1&app_id={options.AppId}";
             using var uploadResponse = await SendAsync(HttpMethod.Post, uploadUri, content, cancellationToken).ConfigureAwait(false);
             var uploadBody = await ReadJsonAsync(uploadResponse, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(uploadBody, "分片上传");

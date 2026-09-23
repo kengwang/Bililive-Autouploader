@@ -44,6 +44,20 @@ public sealed record ComparisonItemDto(
     bool Selected,
     bool DeleteLocalAfterUpload);
 
+public sealed record ComparisonEnqueueItem(string RelativePath, bool DeleteLocalAfterUpload);
+
+public sealed record ManualUploadItem(string RelativePath, bool DeleteLocalAfterUpload);
+
+public interface IManualUploadService
+{
+    Task<IReadOnlyList<Guid>> EnqueueAsync(IReadOnlyList<ManualUploadItem> items, CancellationToken cancellationToken);
+}
+
+public interface IComparisonJobService
+{
+    Task<IReadOnlyList<Guid>> EnqueueAsync(Guid comparisonId, IReadOnlyList<ComparisonEnqueueItem> items, CancellationToken cancellationToken);
+}
+
 public interface IWebhookProcessor
 {
     Task<WebhookProcessResult> ProcessAsync(WebhookEnvelope envelope, CancellationToken cancellationToken);
@@ -76,7 +90,7 @@ public interface ILocalFileService
 {
     Task<IReadOnlyList<FileEntryDto>> ListAsync(string? relativePath, CancellationToken cancellationToken);
     Task<bool> WaitForStableAsync(string path, TimeSpan timeout, CancellationToken cancellationToken);
-    Task DeleteAsync(string path, CancellationToken cancellationToken);
+    Task DeleteAsync(string path, CancellationToken cancellationToken, bool recursive = false);
 }
 
 public interface IBaiduPanClient

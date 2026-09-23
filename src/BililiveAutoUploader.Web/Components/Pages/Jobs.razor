@@ -1,0 +1,21 @@
+@page "/jobs"
+@attribute [Authorize]
+@inject IUploadJobStore JobStore
+@inject IUploadJobQueue Queue
+@rendermode InteractiveServer
+
+<PageTitle>任务列表 - 录播上传面板</PageTitle>
+<div class="page-heading"><div><p class="eyebrow">UPLOAD QUEUE</p><h1>任务列表</h1><p class="muted">查看同步进度、错误和重试次数，打开任务可以查看文件明细。</p></div><button @onclick="ReloadAsync" disabled="@_busy">刷新</button></div>
+@if (_error is not null) { <p class="error">@_error</p> }
+<section class="card"><div class="compare-toolbar"><label>状态 <select @bind="_statusFilter"><option value="">全部</option>@foreach (var status in Enum.GetValues<UploadJobStatus>()) { <option value="@status">@status</option> }</select></label><span class="muted">显示 @_visibleJobs.Count / @_jobs.Count 个任务</span></div><div class="table-scroll"><table><thead><tr><th>状态</th><th>路径组</th><th>进度</th><th>重试</th><th>错误</th><th>创建时间</th><th>操作</th></tr></thead><tbody>@foreach (var job in _visibleJobs) { <tr><td><span class="status">@job.Status</span></td><td class="path-cell">@job.LocalGroupKey</td><td>@Progress(job)</td><td>@job.AttemptCount</td><td class="error-cell">@job.LastError</td><td>@job.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td><td><a class="button-link small-link" href="/jobs/@job.Id">详情</a><button @onclick="() => RetryAsync(job)" disabled="@(job.Status is UploadJobStatus.Running or UploadJobStatus.Pending)">重试</button></td></tr> }</tbody></table></div></section>
+@code {
+    private List<UploadJob> _jobs = [];
+    private string _statusFilter = string.Empty;
+    private bool _busy;
+    private string? _error;
+    private List<UploadJob> _visibleJobs => string.IsNullOrEmpty(_statusFilter) ? _jobs : _jobs.Where(x => x.Status.ToString() == _statusFilter).ToList();
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync() { _busy = true; try { _jobs = (await JobStore.GetPageAsync(0, 200, CancellationToken.None)).ToList(); _error = null; } catch (Exception ex) { _error = ex.Message; } finally { _busy = false; } }
+    private async Task RetryAsync(UploadJob job) { job.Status = UploadJobStatus.Pending; job.NextAttemptAt = null; job.LastError = null; await JobStore.SaveAsync(job, CancellationToken.None); await Queue.EnqueueAsync(job.Id, CancellationToken.None); await ReloadAsync(); }
+    private static string Progress(UploadJob job) => job.TotalBytes == 0 ? "0%" : $"{job.UploadedBytes * 100 / job.TotalBytes}% ({job.UploadedBytes:N0}/{job.TotalBytes:N0})";
+}

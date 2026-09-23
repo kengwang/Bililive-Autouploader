@@ -67,7 +67,7 @@ public sealed class EfUploadJobStore(IDbContextFactory<AppDbContext> factory) : 
     public async Task<IReadOnlyList<UploadJob>> GetPageAsync(int skip, int take, CancellationToken cancellationToken)
     {
         await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var jobs = await db.UploadJobs.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var jobs = await db.UploadJobs.Include(x => x.Items).AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
         return jobs.OrderByDescending(x => x.CreatedAt).Skip(skip).Take(take).ToList();
     }
 

@@ -44,10 +44,13 @@ public sealed class LocalFileService(StorageOptions options) : ILocalFileService
         return false;
     }
 
-    public Task DeleteAsync(string path, CancellationToken cancellationToken)
+    public Task DeleteAsync(string path, CancellationToken cancellationToken, bool recursive = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (File.Exists(path)) File.Delete(path);
+        var relative = PathSafety.NormalizeRelative(options.LocalRoot, path);
+        var fullPath = PathSafety.ResolveUnderRoot(options.LocalRoot, relative);
+        if (File.Exists(fullPath)) File.Delete(fullPath);
+        else if (recursive && Directory.Exists(fullPath)) Directory.Delete(fullPath, recursive: true);
         return Task.CompletedTask;
     }
 }

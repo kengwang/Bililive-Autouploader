@@ -1,0 +1,106 @@
+@page "/compare"
+@attribute [Authorize]
+@inject IFileComparisonService ComparisonService
+@inject IManualUploadService ManualUploadService
+@inject ILocalFileService LocalFiles
+@inject IBaiduPanClient Baidu
+@inject IUploadJobStore JobStore
+@inject StorageOptions Storage
+@rendermode InteractiveServer
+
+<PageTitle>文件对照 - 录播上传面板</PageTitle>
+<div class="page-heading">
+    <div><p class="eyebrow">LOCAL ↔ BAIDU PAN</p><h1>双边文件对照</h1><p class="muted">进入同一相对目录查看两边文件，选择本地项批量同步；每项都可以单独决定上传成功后是否删除本地文件。</p></div>
+    <div class="heading-actions"><button @onclick="RefreshDirectoryAsync" disabled="@_busy">刷新目录</button><button class="secondary-button" @onclick="CompareAllAsync" disabled="@_busy">全量扫描</button></div>
+</div>
+@if (_error is not null) { <p class="error">@_error</p> }
+@if (_message is not null) { <p class="success">@_message</p> }
+<section class="card directory-bar"><button class="secondary-button" @onclick="GoUpAsync" disabled="@(_relativeDirectory.Length == 0 || _busy)">上一级</button><span class="directory-root">本地 /recordings/@_relativeDirectory</span><span class="directory-arrow">↔</span><span class="directory-root">百度 @Storage.CloudRoot/@_relativeDirectory</span></section>
+<section class="dual-pane">
+    <div class="card browser-pane"><div class="pane-heading"><h2>本地录播目录</h2><span>@_localEntries.Count 项</span></div><div class="table-scroll"><table><thead><tr><th></th><th>名称</th><th>大小</th><th>同步状态</th><th>修改时间</th><th></th></tr></thead><tbody>
+    @foreach (var entry in _localEntries) { <tr class="@(entry.IsDirectory ? "directory-row" : null)"><td>@if (!entry.IsDirectory) { <input type="checkbox" checked="@IsSelected(entry.Path)" @onchange="e => ToggleSelection(entry, e)" /> }</td><td><button class="name-button" @onclick="() => OpenAsync(entry)" disabled="@_busy">@(entry.IsDirectory ? "📁 " : "📄 ")@entry.Name</button></td><td>@FormatBytes(entry.Length)</td><td><span class="compare-kind @LocalStatusClass(entry)">@LocalStatusText(entry)</span></td><td>@entry.LastModified?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td><td><button class="icon-button" @onclick="() => AskDeleteAsync(entry, false)">删除</button></td></tr> }
+    </tbody></table></div></div>
+    <div class="card browser-pane"><div class="pane-heading"><h2>百度网盘目录</h2><span>@_cloudEntries.Count 项</span></div><div class="table-scroll"><table><thead><tr><th></th><th>名称</th><th>大小</th><th>同步状态</th><th></th></tr></thead><tbody>
+    @foreach (var entry in _cloudEntries) { <tr class="@(entry.IsDirectory ? "directory-row" : null)"><td></td><td><button class="name-button" @onclick="() => OpenCloudAsync(entry)" disabled="@_busy">@(entry.IsDirectory ? "📁 " : "📄 ")@entry.Name</button></td><td>@(entry.IsDirectory ? "—" : FormatBytes(entry.Length))</td><td><span class="compare-kind @StatusClass(entry)">@StatusText(entry)</span></td><td><button class="icon-button" @onclick="() => AskDeleteAsync(entry, true)">删除</button></td></tr> }
+    </tbody></table></div></div>
+</section>
+<section class="card sync-toolbar"><div><strong>当前目录批量操作</strong><span class="muted">已选择 @_selected.Count 项</span></div><label class="check-row"><input type="checkbox" @bind="_deleteAfterUpload" />默认上传成功后删除本地文件</label><div class="toolbar"><button @onclick="SyncSelectedAsync" disabled="@(_selected.Count == 0 || _busy)">同步选中文件</button><button class="danger-button" @onclick="AskDeleteSelected" disabled="@(_selected.Count == 0 || _busy)">删除选中文件</button></div></section>
+@if (_comparisonRun is not null) { <section class="card"><div class="pane-heading"><h2>最近一次全量比对的不一致项</h2><span class="muted">共 @_mismatches.Count 项</span></div>@if (_mismatches.Count == 0) { <p class="muted">两边没有发现大小不一致或单边文件。</p> } else { <div class="table-scroll"><table><thead><tr><th>相对路径</th><th>状态</th><th>本地</th><th>云端</th><th>操作</th></tr></thead><tbody>@foreach (var item in _mismatches) { <tr><td class="path-cell">@item.RelativePath</td><td><span class="compare-kind kind-@item.Kind">@KindText(item.Kind)</span></td><td>@FormatBytes(item.LocalLength)</td><td>@FormatBytes(item.CloudLength)</td><td><button class="secondary-button" @onclick="() => OpenMismatchAsync(item)">进入目录</button>@if (item.LocalLength is not null) { <button @onclick="() => SyncMismatchAsync(item)">同步</button> }</td></tr> }</tbody></table></div> }</section> }
+@if (_pendingDelete is not null) { <section class="card confirm-card"><strong>确认删除 @_pendingDelete.Name？</strong><span class="muted">@(_pendingDelete.IsDirectory ? "目录及其内容将被删除。" : "文件将被删除。")</span><button class="danger-button" @onclick="DeletePendingAsync">确认删除</button><button class="secondary-button" @onclick="ClearDelete">取消</button></section> }
+@if (_pendingDeleteSelected) { <section class="card confirm-card"><strong>确认删除已选择的 @_selected.Count 个本地文件？</strong><span class="muted">此操作不可恢复。</span><button class="danger-button" @onclick="DeleteSelectedAsync">确认删除</button><button class="secondary-button" @onclick="ClearDelete">取消</button></section> }
+<section class="card"><div class="pane-heading"><h2>当前目录任务</h2><a href="/">查看全部任务</a></div>@if (_directoryJobs.Count == 0) { <p class="muted">当前目录没有关联任务。</p> } else { <table><thead><tr><th>任务</th><th>状态</th><th>文件</th><th>错误</th></tr></thead><tbody>@foreach (var job in _directoryJobs) { <tr><td><a href="/jobs/@job.Id">@job.Id.ToString()[..8]</a></td><td><span class="status">@job.Status</span></td><td>@job.Items.Count</td><td>@job.LastError</td></tr> }</tbody></table> }</section>
+
+@code {
+    private string _relativeDirectory = string.Empty;
+    private List<FileEntryDto> _localEntries = [];
+    private List<CloudFileEntry> _cloudEntries = [];
+    private List<UploadJob> _directoryJobs = [];
+    private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
+    private bool _deleteAfterUpload = true;
+    private bool _busy;
+    private string? _error;
+    private string? _message;
+    private DeleteTarget? _pendingDelete;
+    private bool _pendingDeleteSelected;
+    private ComparisonRun? _comparisonRun;
+    private IReadOnlyList<ComparisonItem> _mismatches => _comparisonRun?.Items.Where(x => x.Kind is ComparisonKind.LocalOnly or ComparisonKind.CloudOnly or ComparisonKind.DifferentSize or ComparisonKind.HashDifferent).ToList() ?? [];
+    protected override async Task OnInitializedAsync() => await RefreshDirectoryAsync();
+    private async Task RefreshDirectoryAsync()
+    {
+        _busy = true; _error = null; _message = null;
+        try { _localEntries = (await LocalFiles.ListAsync(_relativeDirectory, CancellationToken.None)).OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name).ToList(); _cloudEntries = (await Baidu.ListAsync(CloudPath(_relativeDirectory), CancellationToken.None)).OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name).ToList(); _selected.RemoveWhere(path => !_localEntries.Any(x => string.Equals(x.Path, path, StringComparison.OrdinalIgnoreCase))); var jobs = await JobStore.GetPageAsync(0, 200, CancellationToken.None); _directoryJobs = jobs.Where(x => x.Items.Any(i => IsInCurrentDirectory(i.RelativePath))).ToList(); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+    private async Task CompareAllAsync()
+    {
+        _busy = true; _error = null; _message = null;
+        try { _comparisonRun = await ComparisonService.CompareAsync(CancellationToken.None); _message = $"全量扫描完成，共 {_comparisonRun.Items.Count} 个文件。"; await RefreshDirectoryAsync(); }
+        catch (Exception ex) { _error = ex.Message; _busy = false; }
+    }
+    private async Task OpenAsync(FileEntryDto entry) { if (entry.IsDirectory) { _relativeDirectory = entry.Path; await RefreshDirectoryAsync(); } }
+    private async Task OpenCloudAsync(CloudFileEntry entry) { if (entry.IsDirectory) { _relativeDirectory = RelativeFromCloudPath(entry.Path); await RefreshDirectoryAsync(); } }
+    private async Task GoUpAsync() { _relativeDirectory = Parent(_relativeDirectory); await RefreshDirectoryAsync(); }
+    private void ToggleSelection(FileEntryDto entry, ChangeEventArgs args) { if ((bool)args.Value!) _selected.Add(entry.Path); else _selected.Remove(entry.Path); }
+    private bool IsSelected(string path) => _selected.Contains(path);
+    private async Task SyncSelectedAsync()
+    {
+        _busy = true; _error = null; _message = null;
+        try { var ids = await ManualUploadService.EnqueueAsync(_selected.Select(x => new ManualUploadItem(x, _deleteAfterUpload)).ToArray(), CancellationToken.None); _selected.Clear(); _message = $"已创建 {ids.Count} 个同步任务。"; await RefreshDirectoryAsync(); }
+        catch (Exception ex) { _error = ex.Message; _busy = false; }
+    }
+    private async Task OpenMismatchAsync(ComparisonItem item) { _relativeDirectory = Parent(item.RelativePath); await RefreshDirectoryAsync(); }
+    private async Task SyncMismatchAsync(ComparisonItem item)
+    {
+        _busy = true; _error = null;
+        try { var ids = await ManualUploadService.EnqueueAsync([new ManualUploadItem(item.RelativePath, _deleteAfterUpload)], CancellationToken.None); _message = $"已创建 {ids.Count} 个同步任务。"; await RefreshDirectoryAsync(); }
+        catch (Exception ex) { _error = ex.Message; _busy = false; }
+    }
+    private Task AskDeleteAsync(FileEntryDto entry, bool cloud) { _pendingDeleteSelected = false; _pendingDelete = new DeleteTarget(entry.Name, entry.Path, entry.IsDirectory, cloud); return Task.CompletedTask; }
+    private Task AskDeleteAsync(CloudFileEntry entry, bool cloud) { _pendingDeleteSelected = false; _pendingDelete = new DeleteTarget(entry.Name, RelativeFromCloudPath(entry.Path), entry.IsDirectory, cloud); return Task.CompletedTask; }
+    private void AskDeleteSelected() { _pendingDelete = null; _pendingDeleteSelected = _selected.Count > 0; }
+    private async Task DeletePendingAsync()
+    {
+        if (_pendingDelete is null) return; _busy = true; _error = null; _message = null;
+        try { if (_pendingDelete.Cloud) await Baidu.DeleteAsync(CloudPath(_pendingDelete.RelativePath), CancellationToken.None); else await LocalFiles.DeleteAsync(_pendingDelete.RelativePath, CancellationToken.None, _pendingDelete.IsDirectory); _message = $"已删除 {_pendingDelete.Name}。"; _pendingDelete = null; await RefreshDirectoryAsync(); }
+        catch (Exception ex) { _error = ex.Message; _busy = false; }
+    }
+    private async Task DeleteSelectedAsync()
+    {
+        if (!_pendingDeleteSelected) return; _busy = true; _error = null;
+        try { foreach (var path in _selected.ToArray()) await LocalFiles.DeleteAsync(path, CancellationToken.None); _selected.Clear(); _pendingDeleteSelected = false; await RefreshDirectoryAsync(); _message = "已删除所选本地文件。"; }
+        catch (Exception ex) { _error = ex.Message; _busy = false; }
+    }
+    private void ClearDelete() { _pendingDelete = null; _pendingDeleteSelected = false; }
+    private string CloudPath(string relative) => (Storage.CloudRoot.TrimEnd('/') + "/" + relative.Trim('/')).TrimEnd('/');
+    private string RelativeFromCloudPath(string path) { var root = Storage.CloudRoot.TrimEnd('/'); return path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path[root.Length..].Trim('/') : path.Trim('/'); }
+    private bool IsInCurrentDirectory(string path) => string.Equals(Path.GetDirectoryName(path)?.Replace('\\', '/').Trim('/'), _relativeDirectory.Trim('/'), StringComparison.OrdinalIgnoreCase);
+    private static string Parent(string path) { var normalized = path.Trim('/'); var index = normalized.LastIndexOf('/'); return index < 0 ? string.Empty : normalized[..index]; }
+    private string StatusText(CloudFileEntry entry) { var local = _localEntries.FirstOrDefault(x => string.Equals(x.Name, entry.Name, StringComparison.OrdinalIgnoreCase)); return local is null ? "仅云端" : local.IsDirectory != entry.IsDirectory ? "类型不同" : local.IsDirectory || local.Length == entry.Length ? "已同步" : "大小不同"; }
+    private string StatusClass(CloudFileEntry entry) => StatusText(entry).Replace("仅云端", "kind-CloudOnly").Replace("已同步", "kind-SameSize").Replace("大小不同", "kind-DifferentSize").Replace("类型不同", "kind-DifferentSize");
+    private string LocalStatusText(FileEntryDto entry) { var cloud = _cloudEntries.FirstOrDefault(x => string.Equals(x.Name, entry.Name, StringComparison.OrdinalIgnoreCase)); return cloud is null ? "仅本地" : entry.IsDirectory != cloud.IsDirectory ? "类型不同" : entry.IsDirectory || entry.Length == cloud.Length ? "已同步" : "大小不同"; }
+    private string LocalStatusClass(FileEntryDto entry) => LocalStatusText(entry).Replace("仅本地", "kind-LocalOnly").Replace("已同步", "kind-SameSize").Replace("大小不同", "kind-DifferentSize").Replace("类型不同", "kind-DifferentSize");
+    private static string KindText(ComparisonKind kind) => kind switch { ComparisonKind.LocalOnly => "仅本地", ComparisonKind.CloudOnly => "仅云端", ComparisonKind.SameSize => "大小一致", ComparisonKind.DifferentSize => "大小不同", ComparisonKind.HashEqual => "哈希一致", ComparisonKind.HashDifferent => "哈希不同", _ => "无法读取" };
+    private static string FormatBytes(long? value) => value is null ? "—" : value < 1024 * 1024 ? $"{value:N0} B" : $"{value.Value / 1024d / 1024d:N2} MiB";
+    private sealed record DeleteTarget(string Name, string RelativePath, bool IsDirectory, bool Cloud);
+}

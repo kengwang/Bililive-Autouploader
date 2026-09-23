@@ -98,6 +98,8 @@ builder.Services.AddScoped<IUploadJobStore, EfUploadJobStore>();
 builder.Services.AddScoped<IUploadJobFactory, EfUploadJobFactory>();
 builder.Services.AddScoped<IDbComparisonStore, EfComparisonStore>();
 builder.Services.AddScoped<IFileComparisonService, FileComparisonService>();
+builder.Services.AddScoped<IManualUploadService, EfManualUploadService>();
+builder.Services.AddScoped<IComparisonJobService, EfComparisonJobService>();
 builder.Services.AddScoped<IUploadOrchestrator, UploadOrchestrator>();
 builder.Services.AddSingleton<ILocalFileService, LocalFileService>();
 builder.Services.AddSingleton<IFileChecksumService, FileChecksumService>();
@@ -133,6 +135,8 @@ app.MapDelete("/api/jobs/{id:guid}", async (Guid id, IUploadJobStore store, Canc
 app.MapGet("/api/files/local", async (string? path, ILocalFileService files, CancellationToken ct) => Results.Ok(await files.ListAsync(path, ct)));
 app.MapGet("/api/files/cloud", async (string? path, IBaiduPanClient client, CancellationToken ct) => Results.Ok(await client.ListAsync(path ?? "/", ct)));
 app.MapPost("/api/comparisons", async (IFileComparisonService comparison, CancellationToken ct) => Results.Ok(await comparison.CompareAsync(ct)));
+app.MapPost("/api/comparisons/{id:guid}/enqueue", async (Guid id, ComparisonEnqueueItem[] items, IComparisonJobService service, CancellationToken ct) => Results.Accepted($"/api/jobs", await service.EnqueueAsync(id, items, ct)));
+app.MapPost("/api/uploads", async (ManualUploadItem[] items, IManualUploadService service, CancellationToken ct) => Results.Accepted($"/api/jobs", await service.EnqueueAsync(items, ct)));
 app.MapGet("/api/settings/upload", ([Microsoft.AspNetCore.Mvc.FromServices] StorageOptions settings) => Results.Ok(settings));
 app.MapPut("/api/settings/upload", (StorageOptions incoming, [Microsoft.AspNetCore.Mvc.FromServices] StorageOptions settings) => { settings.LocalRoot = incoming.LocalRoot; settings.CloudRoot = incoming.CloudRoot; settings.MaxParallelJobs = Math.Max(1, incoming.MaxParallelJobs); settings.PartParallelism = Math.Max(1, incoming.PartParallelism); settings.SidecarWait = incoming.SidecarWait; settings.StableChecks = Math.Max(1, incoming.StableChecks); settings.StableCheckInterval = incoming.StableCheckInterval; settings.SidecarExtensionsCsv = incoming.SidecarExtensionsCsv; return Results.Ok(settings); });
 app.MapGet("/api/settings/baidu", ([Microsoft.AspNetCore.Mvc.FromServices] BaiduOptions settings) => Results.Ok(new { settings.BaseAddress, settings.PcsAddress, settings.AppId, settings.ChunkSizeMiB, settings.MaxRetries, HasCookie = !string.IsNullOrWhiteSpace(settings.Cookie), HasAccessToken = !string.IsNullOrWhiteSpace(settings.AccessToken) }));

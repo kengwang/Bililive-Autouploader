@@ -1,0 +1,26 @@
+@page "/jobs/{Id:guid}"
+@attribute [Authorize]
+@inject IUploadJobStore JobStore
+@inject IUploadJobQueue Queue
+@rendermode InteractiveServer
+
+<PageTitle>任务详情 - 录播上传面板</PageTitle>
+<div class="page-heading"><div><p class="eyebrow">UPLOAD JOB</p><h1>任务详情</h1><p class="muted">@Id</p></div><a class="button-link" href="/compare">返回文件对照</a></div>
+@if (_job is null) { <section class="card"><p>@(_error ?? "加载中…")</p></section> }
+else {
+    <section class="stats-grid"><div class="stat"><span>状态</span><strong class="job-state">@_job.Status</strong></div><div class="stat"><span>文件数</span><strong>@_job.Items.Count</strong></div><div class="stat"><span>已上传</span><strong>@FormatBytes(_job.UploadedBytes) / @FormatBytes(_job.TotalBytes)</strong></div><div class="stat"><span>重试次数</span><strong>@_job.AttemptCount</strong></div></section>
+    <section class="card"><div class="pane-heading"><h2>操作</h2><span class="muted">@_job.CreatedAt.ToLocalTime()</span></div><div class="toolbar"><button @onclick="RetryAsync">重试</button><button class="secondary-button" @onclick="PauseAsync">暂停</button><button class="secondary-button" @onclick="ResumeAsync">恢复</button><button class="danger-button" @onclick="CancelAsync">取消</button></div>@if (_job.LastError is not null) { <p class="error">@_job.LastError</p> }</section>
+    <section class="card"><h2>文件</h2><table><thead><tr><th>相对路径</th><th>云端路径</th><th>大小</th><th>上传</th><th>删除</th></tr></thead><tbody>@foreach (var item in _job.Items) { <tr><td class="path-cell">@item.RelativePath</td><td class="path-cell">@item.CloudPath</td><td>@FormatBytes(item.Length)</td><td>@(item.Uploaded ? "完成" : "待处理")</td><td>@(item.Deleted ? "已删除" : item.DeleteAfterSuccess ? "成功后删除" : "保留")</td></tr> }</tbody></table></section>
+}
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private UploadJob? _job;
+    private string? _error;
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private async Task ReloadAsync() { try { _job = await JobStore.GetAsync(Id, CancellationToken.None); if (_job is null) _error = "任务不存在。"; } catch (Exception ex) { _error = ex.Message; } }
+    private async Task RetryAsync() { if (_job is null) return; _job.Status = UploadJobStatus.Pending; _job.LastError = null; _job.NextAttemptAt = null; await JobStore.SaveAsync(_job, CancellationToken.None); await Queue.EnqueueAsync(_job.Id, CancellationToken.None); await ReloadAsync(); }
+    private async Task PauseAsync() { if (_job is null) return; _job.Status = UploadJobStatus.Paused; await JobStore.SaveAsync(_job, CancellationToken.None); await ReloadAsync(); }
+    private async Task ResumeAsync() { if (_job is null) return; _job.Status = UploadJobStatus.Pending; await JobStore.SaveAsync(_job, CancellationToken.None); await Queue.EnqueueAsync(_job.Id, CancellationToken.None); await ReloadAsync(); }
+    private async Task CancelAsync() { if (_job is null) return; _job.Status = UploadJobStatus.Canceled; await JobStore.SaveAsync(_job, CancellationToken.None); await ReloadAsync(); }
+    private static string FormatBytes(long value) => value < 1024 * 1024 ? $"{value:N0} B" : $"{value / 1024d / 1024d:N2} MiB";
+}

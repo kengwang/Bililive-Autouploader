@@ -1,12 +1,11 @@
 @page "/"
 @attribute [Authorize]
 @inject IUploadJobStore JobStore
-@inject IFileComparisonService ComparisonService
 @rendermode InteractiveServer
 
 <PageTitle>录播上传面板</PageTitle>
 <h1>录播上传面板</h1>
-<div class="toolbar"><button @onclick="RefreshAsync">刷新任务</button><button @onclick="CompareAsync">开始本地/云端比对</button></div>
+<div class="toolbar"><button @onclick="RefreshAsync">刷新任务</button><a class="button-link" href="/compare">打开文件对照</a></div>
 @if (_error is not null) { <p class="error">@_error</p> }
 <section class="card">
     <h2>上传任务</h2>
@@ -18,15 +17,9 @@
         </tbody></table>
     }
 </section>
-@if (_comparison is not null) {
-<section class="card"><h2>最近一次比对</h2><p>共 @_comparison.Items.Count 项，完成于 @_comparison.CompletedAt</p><table><thead><tr><th>路径</th><th>结果</th><th>本地大小</th><th>云端大小</th></tr></thead><tbody>
-@foreach (var item in _comparison.Items.Take(100)) { <tr><td>@item.RelativePath</td><td>@item.Kind</td><td>@item.LocalLength</td><td>@item.CloudLength</td></tr> }
-</tbody></table></section>
-}
 
 @code {
     private List<JobSummary>? _jobs;
-    private ComparisonRun? _comparison;
     private string? _error;
     protected override async Task OnInitializedAsync() => await RefreshAsync();
     private async Task RefreshAsync()
@@ -43,16 +36,4 @@
         }
     }
 
-    private async Task CompareAsync()
-    {
-        try
-        {
-            _comparison = await ComparisonService.CompareAsync(CancellationToken.None);
-            _error = null;
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-    }
 }

@@ -121,7 +121,12 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
 
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
-        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // Baidu occasionally returns `charset=utf8` (without the hyphen), which is
+        // not a registered .NET encoding name. Decode the protocol payload as UTF-8
+        // from bytes so the real Baidu error code is preserved instead of throwing
+        // while HttpContent tries to interpret the invalid charset token.
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        var text = System.Text.Encoding.UTF8.GetString(bytes);
         if (!response.IsSuccessStatusCode) throw new HttpRequestException($"百度网盘 HTTP {(int)response.StatusCode}: {text}");
         return JsonDocument.Parse(text).RootElement.Clone();
     }

@@ -8,7 +8,7 @@ public sealed class LocalFileService(StorageOptions options) : ILocalFileService
 {
     public Task<IReadOnlyList<FileEntryDto>> ListAsync(string? relativePath, CancellationToken cancellationToken)
     {
-        var root = PathSafety.ResolveUnderRoot(options.LocalRoot, relativePath ?? ".");
+        var root = PathSafety.ResolveUnderRoot(options.LocalRoot, string.IsNullOrWhiteSpace(relativePath) ? "." : relativePath);
         if (!Directory.Exists(root)) return Task.FromResult<IReadOnlyList<FileEntryDto>>([]);
         var entries = Directory.EnumerateFileSystemEntries(root)
             .Select(path =>

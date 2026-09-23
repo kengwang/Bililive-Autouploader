@@ -120,7 +120,7 @@ public interface IFileComparisonService
 public sealed class StorageOptions
 {
     public string LocalRoot { get; set; } = "/recordings";
-    public string CloudRoot { get; set; } = "/录播";
+    public string CloudRoot { get; set; } = "/alist/bililive";
     public int MaxParallelJobs { get; set; } = 2;
     public int PartParallelism { get; set; } = 4;
     public TimeSpan SidecarWait { get; set; } = TimeSpan.FromSeconds(15);

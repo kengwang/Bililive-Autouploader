@@ -14,7 +14,8 @@ public static class PathSafety
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
         var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
-        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), fullRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+            && !fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("路径不能越过根目录。", nameof(relativePath));
         return fullPath;
     }

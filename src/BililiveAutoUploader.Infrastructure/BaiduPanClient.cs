@@ -46,7 +46,7 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
     {
         var form = new Dictionary<string, string> { ["path"] = path, ["isdir"] = "1", ["block_list"] = "[]", ["rtype"] = "0" };
         using var response = await SendAsync(HttpMethod.Post, $"{options.BaseAddress.TrimEnd('/')}/api/create?a=mkdir", new FormUrlEncodedContent(form), cancellationToken).ConfigureAwait(false);
-        var body = await ReadJsonAsync(response, cancellationToken).ConfigureAwait(false);
+        var body = await ReadJsonAsync(response, cancellationToken, allowHttpError: true).ConfigureAwait(false);
         EnsureSuccess(body, "创建目录", allowExists: true);
     }
 
@@ -121,7 +121,7 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
         return await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken, bool allowHttpError = false)
     {
         // Baidu occasionally returns `charset=utf8` (without the hyphen), which is
         // not a registered .NET encoding name. Decode the protocol payload as UTF-8
@@ -129,7 +129,7 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
         // while HttpContent tries to interpret the invalid charset token.
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         var text = System.Text.Encoding.UTF8.GetString(bytes);
-        if (!response.IsSuccessStatusCode) throw new HttpRequestException($"百度网盘 HTTP {(int)response.StatusCode}: {text}");
+        if (!response.IsSuccessStatusCode && !allowHttpError) throw new HttpRequestException($"百度网盘 HTTP {(int)response.StatusCode}: {text}");
         return JsonDocument.Parse(text).RootElement.Clone();
     }
 

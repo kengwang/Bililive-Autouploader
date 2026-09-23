@@ -39,7 +39,12 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
         var body = await ReadJsonAsync(response, cancellationToken).ConfigureAwait(false);
         if (!body.TryGetProperty("info", out var info) || info.GetArrayLength() == 0) return null;
         var item = info[0];
-        return new CloudFileEntry(item.GetProperty("path").GetString() ?? path, item.GetProperty("filename").GetString() ?? Path.GetFileName(path), item.GetProperty("isdir").GetInt32() == 1, item.GetProperty("size").GetInt64(), item.TryGetProperty("md5", out var md5) ? md5.GetString() : null);
+        var filename = item.TryGetProperty("filename", out var filenameProperty)
+            ? filenameProperty.GetString()
+            : item.TryGetProperty("server_filename", out var serverFilenameProperty) ? serverFilenameProperty.GetString() : null;
+        var isDirectory = item.TryGetProperty("isdir", out var isDirectoryProperty) && isDirectoryProperty.GetInt32() == 1;
+        var length = item.TryGetProperty("size", out var sizeProperty) ? sizeProperty.GetInt64() : 0;
+        return new CloudFileEntry(item.GetProperty("path").GetString() ?? path, filename ?? Path.GetFileName(path), isDirectory, length, item.TryGetProperty("md5", out var md5) ? md5.GetString() : null);
     }
 
     public async Task CreateDirectoryAsync(string path, CancellationToken cancellationToken)

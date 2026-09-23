@@ -127,7 +127,7 @@ public sealed class StorageOptions
     public TimeSpan SidecarWait { get; set; } = TimeSpan.FromSeconds(15);
     public int StableChecks { get; set; } = 2;
     public TimeSpan StableCheckInterval { get; set; } = TimeSpan.FromSeconds(2);
-    public string SidecarExtensionsCsv { get; set; } = ".xml,.ass,.danmaku";
+    public string SidecarExtensionsCsv { get; set; } = ".xml,.ass,.danmaku,.cover.jpg";
 }
 
 public sealed class BaiduOptions

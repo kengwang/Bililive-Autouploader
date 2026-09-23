@@ -23,7 +23,7 @@ services:
       Storage__CloudRoot: /alist/bililive
       Storage__MaxParallelJobs: "2"
       Storage__PartParallelism: "4"
-      Storage__SidecarExtensionsCsv: .xml,.ass,.danmaku
+      Storage__SidecarExtensionsCsv: .xml,.ass,.danmaku,.cover.jpg
       Baidu__Cookie: ""
       Baidu__AccessToken: ""
     networks:

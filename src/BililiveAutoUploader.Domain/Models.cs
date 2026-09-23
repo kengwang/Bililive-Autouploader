@@ -112,7 +112,7 @@ public sealed class UploadRule
     public long Id { get; set; }
     public string Name { get; set; } = "Default";
     public string PrimaryExtensionsCsv { get; set; } = ".flv,.mp4";
-    public string SidecarExtensionsCsv { get; set; } = ".xml,.ass,.danmaku";
+    public string SidecarExtensionsCsv { get; set; } = ".xml,.ass,.danmaku,.cover.jpg";
     public TimeSpan SidecarWait { get; set; } = TimeSpan.FromSeconds(15);
     public bool DeleteLocalAfterSuccess { get; set; } = true;
     public bool Enabled { get; set; } = true;

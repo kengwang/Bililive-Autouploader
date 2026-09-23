@@ -21,6 +21,26 @@ public sealed class WebhookProcessorTests
         Assert.True(second.Duplicate);
     }
 
+    [Fact]
+    public async Task FileClosed_ForConfiguredSidecar_DoesNotCreateStandaloneJob()
+    {
+        var events = new FakeEvents();
+        var factory = new FakeFactory();
+        var queue = new FakeQueue();
+        var processor = new WebhookProcessor(events, factory, queue, new StorageOptions());
+        var data = new { RelativePath = "room/day/recording.xml", FileSize = 10, Duration = 0d,
+            FileOpenTime = DateTimeOffset.UtcNow, FileCloseTime = DateTimeOffset.UtcNow,
+            SessionId = Guid.NewGuid(), RoomId = 1L, ShortId = 1L, Name = "recording.xml", Title = "test" };
+        var envelope = new WebhookEnvelope("FileClosed", DateTimeOffset.UtcNow, "sidecar-1",
+            JsonSerializer.SerializeToElement(data));
+
+        var result = await processor.ProcessAsync(envelope, CancellationToken.None);
+
+        Assert.Null(result.JobId);
+        Assert.Empty(queue.Enqueued);
+        Assert.Equal(0, factory.Created);
+    }
+
     private sealed class FakeEvents : IWebhookEventStore
     {
         public bool AlreadyRecorded { get; set; }
@@ -29,11 +49,13 @@ public sealed class WebhookProcessorTests
     }
     private sealed class FakeFactory : IUploadJobFactory
     {
-        public Task<UploadJob> CreateFromFileClosedAsync(FileClosedData _, StorageOptions __, CancellationToken ___) => Task.FromResult(new UploadJob());
+        public int Created { get; private set; }
+        public Task<UploadJob> CreateFromFileClosedAsync(FileClosedData _, StorageOptions __, CancellationToken ___) { Created++; return Task.FromResult(new UploadJob()); }
     }
     private sealed class FakeQueue : IUploadJobQueue
     {
-        public ValueTask EnqueueAsync(Guid _, CancellationToken __) => ValueTask.CompletedTask;
+        public List<Guid> Enqueued { get; } = [];
+        public ValueTask EnqueueAsync(Guid id, CancellationToken __) { Enqueued.Add(id); return ValueTask.CompletedTask; }
         public async IAsyncEnumerable<Guid> ReadAllAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken _) { yield break; }
     }
 }

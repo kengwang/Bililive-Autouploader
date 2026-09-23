@@ -25,7 +25,7 @@
     </tbody></table></div></div>
 </section>
 <section class="card side-by-side-card"><div class="pane-heading"><h2>当前目录逐项对照</h2><span class="muted">按文件名对齐</span></div><div class="table-scroll"><table><thead><tr><th>本地</th><th>本地大小</th><th>同步状态</th><th>百度网盘</th><th>云端大小</th><th>操作</th></tr></thead><tbody>
-@foreach (var pair in DirectoryPairs) { <tr><td>@if (pair.Local is not null) { <button class="name-button" @onclick="() => OpenAsync(pair.Local)" disabled="@_busy">@(pair.Local.IsDirectory ? "📁 " : "📄 ")@pair.Local.Name</button> } else { <span class="missing">—</span> }</td><td>@FormatBytes(pair.Local?.Length)</td><td><span class="compare-kind @pair.StatusClass">@pair.Status</span></td><td>@if (pair.Cloud is not null) { <button class="name-button" @onclick="() => OpenCloudAsync(pair.Cloud)" disabled="@_busy">@(pair.Cloud.IsDirectory ? "📁 " : "📄 ")@pair.Cloud.Name</button> } else { <span class="missing">—</span> }</td><td>@(pair.Cloud is null || pair.Cloud.IsDirectory ? "—" : FormatBytes(pair.Cloud.Length))</td><td>@if (pair.Local is not null && !pair.Local.IsDirectory) { <button @onclick="() => SyncPairAsync(pair)" disabled="@_busy">同步</button> } else if (pair.Local is not null || pair.Cloud is not null) { <button class="secondary-button" @onclick="() => AskDeletePairAsync(pair)">删除</button> }</td></tr> }
+@foreach (var pair in DirectoryPairs) { <tr><td>@if (pair.Local is not null) { <button class="name-button" @onclick="() => OpenAsync(pair.Local)" disabled="@_busy">@(pair.Local.IsDirectory ? "📁 " : "📄 ")@pair.Local.Name</button> } else { <span class="missing">—</span> }</td><td>@FormatBytes(pair.Local?.Length)</td><td><span class="compare-kind @pair.StatusClass">@pair.Status</span></td><td>@if (pair.Cloud is not null) { <button class="name-button" @onclick="() => OpenCloudAsync(pair.Cloud)" disabled="@_busy">@(pair.Cloud.IsDirectory ? "📁 " : "📄 ")@pair.Cloud.Name</button> } else { <span class="missing">—</span> }</td><td>@(pair.Cloud is null || pair.Cloud.IsDirectory ? "—" : FormatBytes(pair.Cloud.Length))</td><td>@if (pair.Local is not null) { <button @onclick="() => SyncPairAsync(pair)" disabled="@_busy">同步</button> }@if (pair.Local is not null || pair.Cloud is not null) { <button class="secondary-button" @onclick="() => AskDeletePairAsync(pair)">删除</button> }</td></tr> }
 </tbody></table></div></section>
 <section class="card sync-toolbar"><div><strong>当前目录批量操作</strong><span class="muted">已选择 @_selected.Count 项</span></div><label class="check-row"><input type="checkbox" @bind="_deleteAfterUpload" />默认上传成功后删除本地文件</label><div class="toolbar"><button @onclick="SyncSelectedAsync" disabled="@(_selected.Count == 0 || _busy)">同步选中文件</button><button class="danger-button" @onclick="AskDeleteSelected" disabled="@(_selected.Count == 0 || _busy)">删除选中文件</button></div></section>
 @if (_comparisonRun is not null) { <section class="card"><div class="pane-heading"><h2>最近一次全量比对的不一致项</h2><span class="muted">共 @_mismatches.Count 项</span></div>@if (_mismatches.Count == 0) { <p class="muted">两边没有发现大小不一致或单边文件。</p> } else { <div class="table-scroll"><table><thead><tr><th>相对路径</th><th>状态</th><th>本地</th><th>云端</th><th>操作</th></tr></thead><tbody>@foreach (var item in _mismatches) { <tr><td class="path-cell">@item.RelativePath</td><td><span class="compare-kind kind-@item.Kind">@KindText(item.Kind)</span></td><td>@FormatBytes(item.LocalLength)</td><td>@FormatBytes(item.CloudLength)</td><td><button class="secondary-button" @onclick="() => OpenMismatchAsync(item)">进入目录</button>@if (item.LocalLength is not null) { <button @onclick="() => SyncMismatchAsync(item)">同步</button> }</td></tr> }</tbody></table></div> }</section> }
@@ -85,7 +85,14 @@
     {
         if (pair.Local is null || pair.Local.IsDirectory) return;
         _busy = true; _error = null;
-        try { var ids = await ManualUploadService.EnqueueAsync([new ManualUploadItem(pair.Local.Path, _deleteAfterUpload)], CancellationToken.None); _message = $"已创建 {ids.Count} 个同步任务。"; await RefreshDirectoryAsync(); }
+        try
+        {
+            var files = pair.Local.IsDirectory
+                ? await LocalFiles.ListFilesRecursiveAsync(pair.Local.Path, CancellationToken.None)
+                : [pair.Local];
+            var ids = await ManualUploadService.EnqueueAsync(files.Select(x => new ManualUploadItem(x.Path, _deleteAfterUpload)).ToArray(), CancellationToken.None);
+            _message = $"已创建 {ids.Count} 个同步任务，共 {files.Count} 个文件。"; await RefreshDirectoryAsync();
+        }
         catch (Exception ex) { _error = ex.Message; _busy = false; }
     }
     private Task AskDeleteAsync(FileEntryDto entry, bool cloud) { _pendingDeleteSelected = false; _pendingDelete = new DeleteTarget(entry.Name, entry.Path, entry.IsDirectory, cloud); return Task.CompletedTask; }

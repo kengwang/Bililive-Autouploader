@@ -89,6 +89,7 @@ public interface IUploadOrchestrator
 public interface ILocalFileService
 {
     Task<IReadOnlyList<FileEntryDto>> ListAsync(string? relativePath, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FileEntryDto>> ListFilesRecursiveAsync(string? relativePath, CancellationToken cancellationToken);
     Task<bool> WaitForStableAsync(string path, TimeSpan timeout, CancellationToken cancellationToken);
     Task DeleteAsync(string path, CancellationToken cancellationToken, bool recursive = false);
 }

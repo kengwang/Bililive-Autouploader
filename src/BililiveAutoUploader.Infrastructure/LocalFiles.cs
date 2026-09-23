@@ -20,6 +20,20 @@ public sealed class LocalFileService(StorageOptions options) : ILocalFileService
         return Task.FromResult<IReadOnlyList<FileEntryDto>>(entries);
     }
 
+    public Task<IReadOnlyList<FileEntryDto>> ListFilesRecursiveAsync(string? relativePath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var root = PathSafety.ResolveUnderRoot(options.LocalRoot, string.IsNullOrWhiteSpace(relativePath) ? "." : relativePath);
+        if (!Directory.Exists(root)) return Task.FromResult<IReadOnlyList<FileEntryDto>>([]);
+        var entries = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(path =>
+            {
+                var info = new FileInfo(path);
+                return new FileEntryDto(PathSafety.NormalizeRelative(options.LocalRoot, path), info.Name, false, info.Length, info.LastWriteTimeUtc);
+            }).ToList();
+        return Task.FromResult<IReadOnlyList<FileEntryDto>>(entries);
+    }
+
     public async Task<bool> WaitForStableAsync(string path, TimeSpan timeout, CancellationToken cancellationToken)
     {
         var deadline = DateTimeOffset.UtcNow + timeout;

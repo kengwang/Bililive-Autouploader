@@ -28,6 +28,7 @@ public sealed class UploadOrchestrator(
             }
             job.Status = UploadJobStatus.Running;
             job.StartedAt ??= DateTimeOffset.UtcNow;
+            job.TotalBytes = job.Items.Sum(x => x.Length);
             await store.SaveAsync(job, cancellationToken).ConfigureAwait(false);
 
             foreach (var item in job.Items)
@@ -44,13 +45,29 @@ public sealed class UploadOrchestrator(
                 var rapid = await baidu.TryRapidUploadAsync(item.LocalPath, item.CloudPath, checksum, cancellationToken).ConfigureAwait(false);
                 if (!rapid)
                 {
+                    var progressGate = new SemaphoreSlim(1, 1);
+                    var lastProgressSave = DateTimeOffset.MinValue;
+                    var lastProgressAt = DateTimeOffset.UtcNow;
+                    var lastProgressBytes = job.UploadedBytes;
+                    var progressSaveTasks = new List<Task>();
                     var progress = new Progress<UploadProgress>(p =>
                     {
+                        var now = DateTimeOffset.UtcNow;
                         job.UploadedBytes = job.Items.Where(x => x.Uploaded).Sum(x => x.Length) + p.UploadedBytes;
                         job.TotalBytes = job.Items.Sum(x => x.Length);
-                        job.UploadSpeedBytesPerSecond = p.UploadedBytes / Math.Max(1, (DateTimeOffset.UtcNow - job.StartedAt!.Value).TotalSeconds);
+                        var seconds = Math.Max(0.001, (now - lastProgressAt).TotalSeconds);
+                        job.UploadSpeedBytesPerSecond = Math.Max(0, job.UploadedBytes - lastProgressBytes) / seconds;
+                        lastProgressAt = now;
+                        lastProgressBytes = job.UploadedBytes;
+                        if (now - lastProgressSave >= TimeSpan.FromSeconds(1))
+                        {
+                            lastProgressSave = DateTimeOffset.UtcNow;
+                            progressSaveTasks.Add(PersistProgressAsync(job, progressGate, cancellationToken));
+                        }
                     });
                     await baidu.UploadAsync(item.LocalPath, item.CloudPath, checksum, progress, cancellationToken).ConfigureAwait(false);
+                    await Task.WhenAll(progressSaveTasks).ConfigureAwait(false);
+                    progressGate.Dispose();
                 }
                 var remote = await baidu.GetMetadataAsync(item.CloudPath, cancellationToken).ConfigureAwait(false);
                 if (remote is null || remote.Length != checksum.Length)
@@ -85,6 +102,18 @@ public sealed class UploadOrchestrator(
             await store.SaveAsync(job, cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
+    }
+
+    private async Task PersistProgressAsync(UploadJob job, SemaphoreSlim gate, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try { await store.SaveAsync(job, cancellationToken).ConfigureAwait(false); }
+            finally { gate.Release(); }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception ex) { logger.LogDebug(ex, "保存上传进度失败 {JobId}", job.Id); }
     }
 
     private void AddStableSidecars(UploadJob job)

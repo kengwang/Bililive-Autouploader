@@ -38,9 +38,18 @@ public sealed class EfManualUploadService(
                 Status = UploadJobStatus.Ready,
                 DeleteLocalAfterSuccess = group.Any(x => x.Delete)
             };
-            foreach (var selected in group)
+            var selectedByPath = group.ToDictionary(x => x.RelativePath, x => x.Delete, StringComparer.OrdinalIgnoreCase);
+            // 手动同步也遵循录播文件组规则：选中 XML 或 .cover.jpg 时，自动并入同基名主文件
+            // 和已有白名单附属文件，避免每个 sidecar 变成独立任务。
+            var primary = FindPrimaryPath(group.Key);
+            if (primary is not null && !selectedByPath.ContainsKey(primary))
+                selectedByPath[primary] = group.First().Delete;
+            foreach (var sidecar in FindExistingSidecars(group.Key))
+                if (!selectedByPath.ContainsKey(sidecar)) selectedByPath[sidecar] = group.First().Delete;
+
+            foreach (var selected in selectedByPath)
             {
-                var relative = selected.RelativePath.Replace('\\', '/');
+                var relative = selected.Key.Replace('\\', '/');
                 var localPath = PathSafety.ResolveUnderRoot(options.LocalRoot, relative);
                 if (!File.Exists(localPath)) continue;
                 job.Items.Add(new UploadJobItem
@@ -50,7 +59,7 @@ public sealed class EfManualUploadService(
                     CloudPath = (options.CloudRoot.TrimEnd('/') + "/" + relative).Replace("//", "/"),
                     Length = new FileInfo(localPath).Length,
                     IsSidecar = IsSidecar(relative),
-                    DeleteAfterSuccess = selected.Delete
+                    DeleteAfterSuccess = selected.Value
                 });
             }
             if (job.Items.Count > 0) jobsToQueue.Add(job);
@@ -67,8 +76,42 @@ public sealed class EfManualUploadService(
     private string GroupKey(string relative)
     {
         var directory = Path.GetDirectoryName(relative)?.Replace('\\', '/') ?? string.Empty;
-        var stem = Path.GetFileNameWithoutExtension(relative);
+        var stem = Path.GetFileName(relative);
+        foreach (var extension in options.SidecarExtensionsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .OrderByDescending(x => x.Length))
+        {
+            if (stem.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                stem = stem[..^extension.Length];
+                break;
+            }
+        }
+        if (stem.Equals(Path.GetFileName(relative), StringComparison.OrdinalIgnoreCase))
+            stem = Path.GetFileNameWithoutExtension(relative);
         return string.IsNullOrEmpty(directory) ? stem : directory + "/" + stem;
+    }
+
+    private string? FindPrimaryPath(string groupKey)
+    {
+        var directory = Path.GetDirectoryName(groupKey)?.Replace('\\', '/') ?? string.Empty;
+        var stem = Path.GetFileName(groupKey);
+        var directoryPath = PathSafety.ResolveUnderRoot(options.LocalRoot, directory);
+        if (!Directory.Exists(directoryPath)) return null;
+        var candidates = Directory.EnumerateFiles(directoryPath, stem + ".*", SearchOption.TopDirectoryOnly);
+        return candidates.Select(x => PathSafety.NormalizeRelative(options.LocalRoot, x))
+            .FirstOrDefault(x => !IsSidecar(x));
+    }
+
+    private IEnumerable<string> FindExistingSidecars(string groupKey)
+    {
+        var directory = Path.GetDirectoryName(groupKey)?.Replace('\\', '/') ?? string.Empty;
+        var stem = Path.GetFileName(groupKey);
+        foreach (var extension in options.SidecarExtensionsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var relative = string.IsNullOrEmpty(directory) ? stem + extension : directory + "/" + stem + extension;
+            var path = PathSafety.ResolveUnderRoot(options.LocalRoot, relative);
+            if (File.Exists(path)) yield return relative;
+        }
     }
 
     private bool IsSidecar(string relative)

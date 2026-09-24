@@ -95,13 +95,9 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
             cancellationToken.ThrowIfCancellationRequested();
             var read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
             if (read == 0) break;
-            using var content = new MultipartFormDataContent();
-            content.Add(new ByteArrayContent(buffer, 0, read), "uploadedfile", Path.GetFileName(localPath));
             var partOffset = uploaded;
             var uploadUri = $"{options.PcsAddress.TrimEnd('/')}/rest/2.0/pcs/superfile2?method=upload&type=tmpfile&path={Uri.EscapeDataString(cloudPath)}&uploadid={Uri.EscapeDataString(uploadId)}&partseq={part}&partoffset={partOffset}&vip=1&app_id={options.AppId}";
-            using var uploadResponse = await SendAsync(HttpMethod.Post, uploadUri, content, cancellationToken).ConfigureAwait(false);
-            var uploadBody = await ReadJsonAsync(uploadResponse, cancellationToken).ConfigureAwait(false);
-            EnsureSuccess(uploadBody, "分片上传");
+            await UploadPartWithRetryAsync(uploadUri, buffer, read, Path.GetFileName(localPath), part, cancellationToken).ConfigureAwait(false);
             uploaded += read;
             progress?.Report(new UploadProgress(uploaded, checksum.Length, part, blockList.Length));
         }
@@ -109,6 +105,49 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
         using var createResponse = await SendAsync(HttpMethod.Post, $"{options.BaseAddress.TrimEnd('/')}/api/create", new FormUrlEncodedContent(createForm), cancellationToken).ConfigureAwait(false);
         EnsureSuccess(await ReadJsonAsync(createResponse, cancellationToken).ConfigureAwait(false), "合并分片");
     }
+
+    private async Task UploadPartWithRetryAsync(string uri, byte[] buffer, int length, string fileName, int part, CancellationToken cancellationToken)
+    {
+        var attempts = Math.Max(0, options.MaxRetries) + 1;
+        string? lastFailure = null;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                content.Add(new ByteArrayContent(buffer, 0, length), "uploadedfile", fileName);
+                using var response = await SendAsync(HttpMethod.Post, uri, content, cancellationToken).ConfigureAwait(false);
+                var body = await ReadJsonAsync(response, cancellationToken, allowHttpError: true).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    EnsureSuccess(body, "分片上传");
+                    return;
+                }
+
+                lastFailure = $"HTTP {(int)response.StatusCode}: {body}";
+                if (!IsTransient(response.StatusCode))
+                    throw new HttpRequestException($"百度网盘分片上传失败（第 {part + 1} 片）：{lastFailure}");
+            }
+            catch (HttpRequestException ex) when (attempt < attempts)
+            {
+                lastFailure = ex.Message;
+            }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < attempts)
+            {
+                lastFailure = $"请求超时：{ex.Message}";
+            }
+
+            if (attempt < attempts)
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt - 1))), cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new HttpRequestException($"百度网盘分片上传失败（第 {part + 1} 片，已重试 {Math.Max(0, options.MaxRetries)} 次）：{lastFailure}");
+    }
+
+    private static bool IsTransient(HttpStatusCode statusCode)
+        => statusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests
+            || (int)statusCode >= 500;
 
     public async Task DeleteAsync(string path, CancellationToken cancellationToken)
     {
@@ -134,6 +173,8 @@ public sealed class BaiduPanClient(HttpClient httpClient, BaiduOptions options) 
         // while HttpContent tries to interpret the invalid charset token.
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         var text = System.Text.Encoding.UTF8.GetString(bytes);
+        if (string.IsNullOrWhiteSpace(text))
+            throw new HttpRequestException($"百度网盘 HTTP {(int)response.StatusCode}: 响应体为空");
         if (!response.IsSuccessStatusCode && !allowHttpError) throw new HttpRequestException($"百度网盘 HTTP {(int)response.StatusCode}: {text}");
         return JsonDocument.Parse(text).RootElement.Clone();
     }

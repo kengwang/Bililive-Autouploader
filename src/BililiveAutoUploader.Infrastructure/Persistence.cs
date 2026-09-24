@@ -122,7 +122,7 @@ public sealed class EfUploadJobFactory(IUploadJobStore store) : IUploadJobFactor
             if (File.Exists(sidecar))
             {
                 var sidecarRelative = PathSafety.NormalizeRelative(root, sidecar);
-                job.Items.Add(new UploadJobItem { LocalPath = sidecar, RelativePath = sidecarRelative, CloudPath = (options.CloudRoot.TrimEnd('/') + "/" + sidecarRelative).Replace("//", "/"), Length = new FileInfo(sidecar).Length, IsSidecar = true });
+                job.Items.Add(new UploadJobItem { LocalPath = sidecar, RelativePath = sidecarRelative, CloudPath = (options.CloudRoot.TrimEnd('/') + "/" + sidecarRelative).Replace("//", "/"), Length = new FileInfo(sidecar).Length, IsSidecar = true, DeleteAfterSuccess = UploadFilePolicy.ShouldDeleteAfterUpload(sidecarRelative, job.DeleteLocalAfterSuccess) });
             }
         }
         job.Status = UploadJobStatus.Ready;

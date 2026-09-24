@@ -59,7 +59,7 @@ public sealed class EfManualUploadService(
                     CloudPath = (options.CloudRoot.TrimEnd('/') + "/" + relative).Replace("//", "/"),
                     Length = new FileInfo(localPath).Length,
                     IsSidecar = IsSidecar(relative),
-                    DeleteAfterSuccess = selected.Value
+                    DeleteAfterSuccess = UploadFilePolicy.ShouldDeleteAfterUpload(relative, selected.Value)
                 });
             }
             if (job.Items.Count > 0) jobsToQueue.Add(job);

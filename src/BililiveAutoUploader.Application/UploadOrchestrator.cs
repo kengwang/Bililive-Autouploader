@@ -82,7 +82,7 @@ public sealed class UploadOrchestrator(
             {
                 job.Status = UploadJobStatus.DeletePending;
                 await store.SaveAsync(job, cancellationToken).ConfigureAwait(false);
-                foreach (var item in job.Items.Where(x => x.DeleteAfterSuccess && !x.Deleted))
+                foreach (var item in job.Items.Where(x => x.DeleteAfterSuccess && !x.Deleted && !UploadFilePolicy.KeepLocalAfterUpload(x.RelativePath)))
                 {
                     try
                     {
@@ -135,7 +135,7 @@ public sealed class UploadOrchestrator(
                 CloudPath = (options.CloudRoot.TrimEnd('/') + "/" + relative).Replace("//", "/"),
                 Length = new FileInfo(path).Length,
                 IsSidecar = true,
-                DeleteAfterSuccess = job.DeleteLocalAfterSuccess
+                DeleteAfterSuccess = UploadFilePolicy.ShouldDeleteAfterUpload(relative, job.DeleteLocalAfterSuccess)
             });
         }
     }
